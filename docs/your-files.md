@@ -22,7 +22,7 @@ Copy the instructor Python file and rename the copy using your alias.
 For example:
 
 ```text
-src/streaming/producer_case.py
+src/streaming/kafka_producer_case.py
 src/streaming/producer_stellar_analytics.py
 ```
 
@@ -32,7 +32,7 @@ In your `README.md`, add a line with the execution command just after the instru
 Use this command to run your file. For example:
 
 ```shell
-uv run python -m streaming.producer_case
+uv run python -m streaming.kafka_producer_case
 uv run python -m streaming.producer_stellar_analytics
 ```
 

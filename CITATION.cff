@@ -11,9 +11,9 @@
 cff-version: "1.2.0"
 type: software
 
-title: "Streaming Data Project 01: Getting Started with Streaming Data Analytics"
-version: "0.1.0"
-date-released: "2026-04-18"
+title: "streaming-01-foundations"
+version: "0.5.0"
+date-released: "2026-05-09"
 
 authors:
   - family-names: Case
@@ -26,15 +26,14 @@ url: "https://github.com/denisecase/streaming-01-foundations"
 license: MIT
 
 abstract: >
-  Introductory streaming data project focused on Python fundamentals,
-  professional project structure, and reproducible streaming workflows.
-  Emphasis is placed on program execution, logging,
-  and documentation within a version-controlled streaming analytics project.
+  Foundational project for streaming data concepts,
+  local setup, and basic message-oriented workflows.
 
 keywords:
   # identity
-  - streaming data
+  - streaming-data
   - analytics-foundations
+  - foundations
   - project-based-learning
   - logging
 

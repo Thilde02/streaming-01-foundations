@@ -1,22 +1,10 @@
-"""src/streaming/producer_case.py - Simple producer example.
+"""src/streaming/producer_case.py - Local producer example.
 
-Uses a Python generator to simulate a
-stream of online sales, one at a time.
+Reads sales from data/sales.csv
+and writes records to a local simulated topic file one message at a time.
 
 Author: Denise Case
-Date: 2026-04
-
-Practice key Python skills related to:
-- imports
-- logging
-- variables
-- type hints
-- global constants
-- f-strings
-- functions
-- generators
-- main function
-- conditional execution guard
+Date: 2026-05
 
 Terminal command to run this file from the root project folder:
 
@@ -24,195 +12,255 @@ Terminal command to run this file from the root project folder:
 
 OBS:
   Don't edit this file - it should remain a working example.
-  Copy it, rename it app_yourname.py, and modify your copy.
+  Copy it, rename it producer_yourname.py, and modify your copy.
 """
 
-# === DECLARE IMPORTS (BRING IN FREE CODE) ===
+# === DECLARE IMPORTS ===
 
 from collections.abc import Generator
-import csv
+import os
 from pathlib import Path
-import random
-import statistics
 import time
-from typing import Final
+from typing import Any, Final
 
+from datafun_streaming.io.errors import missing_csv_field_message
+from datafun_streaming.io.io_utils import (
+    append_csv_row,
+    format_message_for_log,
+    read_csv_rows,
+)
 from datafun_toolkit.logger import get_logger, log_header, log_path
+from dotenv import load_dotenv
 
-# === CONFIGURE LOGGER ONCE PER MODULE (PYTHON FILE) ===
+from streaming.core.utils import log_env_vars
 
-LOG = get_logger("P01", level="INFO")
+# === CONFIGURE LOGGER ===
+
+LOG = get_logger("P01", level="DEBUG")
+
+# === LOAD ENVIRONMENT VARIABLES ===
+
+load_dotenv(override=True)
+log_env_vars(LOG)
+
+# === DECLARE FALLBACK DEFAULTS ===
+
+# WHY: These defaults intentionally do not match .env.example.
+# If they appear in the log, copy .env.example to .env and try again.
+DEFAULT_TOPIC_NAME: Final[str] = "streaming-01-topic-no-env"
+DEFAULT_MESSAGE_COUNT: Final[str] = "2"
+DEFAULT_MESSAGE_INTERVAL_SECONDS: Final[str] = "0.5"
+DEFAULT_CLEAR_TOPIC_ON_START: Final[str] = "false"
 
 # === DECLARE GLOBAL CONSTANTS ===
 
-# All these global variables are CONSTANT - they do NOT change when the program runs.
-# By convention, constants are named in UPPERCASE_WITH_UNDERSCORES.
-# `Final` is added to indicate these variables should not be reassigned.
+topic_name = os.getenv("KAFKA_TOPIC", DEFAULT_TOPIC_NAME)
+msg_count = os.getenv("PRODUCER_MESSAGE_COUNT", DEFAULT_MESSAGE_COUNT)
+msg_interval_seconds = os.getenv(
+    "PRODUCER_MESSAGE_INTERVAL_SECONDS",
+    DEFAULT_MESSAGE_INTERVAL_SECONDS,
+)
+clear_topic_on_start = os.getenv(
+    "KAFKA_CLEAR_TOPIC_ON_START",
+    DEFAULT_CLEAR_TOPIC_ON_START,
+)
 
-COURSE_NAME: Final[str] = "Streaming Data"
+TOPIC_NAME: Final[str] = topic_name
+MESSAGE_COUNT: Final[int] = int(msg_count)
+MESSAGE_INTERVAL_SECONDS: Final[float] = float(msg_interval_seconds)
+CLEAR_TOPIC_ON_START: Final[bool] = clear_topic_on_start.strip().lower() == "true"
 
-# These constants define our simulated online sales stream.
-# In a real system, this data would come from a live website or payment API.
-MESSAGE_COUNT: Final[int] = 3
-MESSAGE_INTERVAL_SECONDS: Final[float] = 1.0
-
-# Declare a list of products, each is a string.
-# This simulates the variety of items being sold in real-time.
-PRODUCTS: Final[list[str]] = [
-    "Running Shoes",
-    "Yoga Mat",
-    "Water Bottle",
-    "Backpack",
-    "Sunglasses",
-]
-
-# Declare a list of regions where sales occur.
-REGIONS: Final[list[str]] = ["North", "South", "East", "West", "Online"]
-
-# Declare the min and max sale amounts
-# to simulate realistic transaction values in our generated messages.
-SALE_MIN: Final[float] = 5.00
-SALE_MAX: Final[float] = 150.00
-
-
-# === DECLARE GLOBAL CONSTANTS FOR FOLDERS ===
+# === DECLARE CONSTANT PATHS ===
 
 ROOT_DIR: Final[Path] = Path.cwd()
 DATA_DIR: Final[Path] = ROOT_DIR / "data"
+OUTPUT_DIR: Final[Path] = DATA_DIR / "output"
 
-# === DECLARE GLOBAL CONSTANTS FOR FILES ===
-
-OUTPUT_CSV: Final[Path] = DATA_DIR / "sales.csv"
-
-# === DEFINE A GENERATOR FUNCTION TO PRODUCE A STREAM OF SALES ===
-
-# A generator function uses `yield` instead of `return`.
-# It produces one value at a time instead of computing everything at once.
-# This is how we model data in motion - one event arriving at a time.
-# A real sales feed works the same way: each sale arrives as it happens.
+SALES_CSV: Final[Path] = DATA_DIR / "sales.csv"
+TOPIC_CSV: Final[Path] = OUTPUT_DIR / f"{TOPIC_NAME}.csv"
 
 
-def generate_messages(count: int) -> Generator[tuple[int, float, str, str]]:
-    """Generate a stream of simulated online sales, one at a time.
-
-    A generator function uses `yield` instead of `return`.
-    It produces one value at a time instead of computing everything at once.
-    This models data in motion - one sale event arriving at a time.
-    A real sales feed works the same way: each sale arrives as it happens.
-
-    Arguments: count - how many sales to generate.
-
-    Yields: one tuple of (sale_number, amount, product, region) at a time.
-    """
-    for i in range(count):
-        sale_number: int = i + 1
-        amount: float = round(random.uniform(SALE_MIN, SALE_MAX), 2)
-        product: str = random.choice(PRODUCTS)
-        region: str = random.choice(REGIONS)
-        yield sale_number, amount, product, region
+# ==========================================================
+# DEFINE SECTION A. ACQUIRE RESOURCES AND GET READY HELPERS
+# ==========================================================
 
 
-# === DECLARE A FUNCTION TO FORMAT DESCRIPTIVE STATISTICS ===
-
-
-def get_statistics(amounts: list[float]) -> str:
-    """Get a formatted summary showing descriptive statistics on sale amounts.
-
-    Arguments: amounts - a list of sale amount floats from the stream.
-
-    Returns: - a formatted multi-line string.
-    """
-    count: int = len(amounts)
-
-    minimum: float = min(amounts) if count > 0 else 0.0
-    maximum: float = max(amounts) if count > 0 else 0.0
-    average: float = statistics.mean(amounts) if count > 0 else 0.0
-    std_dev: float = statistics.stdev(amounts) if count > 1 else 0.0
-
-    summary: str = f"""
-    Descriptive Statistics for Streaming Sales Amounts ($):
-        Count of sales   : {count}
-        Minimum sale     : ${minimum:.2f}
-        Maximum sale     : ${maximum:.2f}
-        Average sale     : ${average:.2f}
-        Standard deviation: ${std_dev:.2f}
-    """
-
-    LOG.info("Generated formatted multi-line SUMMARY string.")
-    LOG.info("Returning the str to the calling function.")
-    return summary
-
-
-# === DEFINE THE MAIN FUNCTION ===
-
-
-def main() -> None:
-    """Main entry point for this script.
-
-    It doesn't need any outside information, so the parentheses are empty.
-    It doesn't return anything, so we say the return type is None.
-    The colon at the end of the function signature is required.
-    All statements inside the function must be consistently indented.
-    This is a multiline docstring - a special type of comment
-    that explains what the function does.
-
-    Use log_path to log privacy-aware paths for debugging.
-    This is a good practice to verify things are working as expected.
-
-    Arguments: None.
-
-    Returns: None.
-    """
+def log_paths() -> None:
+    """Log run header and all paths."""
     log_header(LOG, "P01")
-
     LOG.info("========================")
-    LOG.info("START main()")
+    LOG.info("START producer main()")
     LOG.info("========================")
-
-    # Use the log_path() function to log paths for debugging.
     log_path(LOG, "ROOT_DIR", ROOT_DIR)
     log_path(LOG, "DATA_DIR", DATA_DIR)
-    log_path(LOG, "OUTPUT_CSV", OUTPUT_CSV)
+    log_path(LOG, "SALES_CSV", SALES_CSV)
+    log_path(LOG, "TOPIC_CSV", TOPIC_CSV)
 
-    # Create the data/ folder if it does not already exist.
-    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
 
-    LOG.info(f"Streaming {MESSAGE_COUNT} sales to {OUTPUT_CSV} ...")
+def load_settings() -> None:
+    """Load local producer settings from .env and log them."""
+    LOG.info("Loading settings from .env...")
+    LOG.info(f"KAFKA_TOPIC                       = {TOPIC_NAME}")
+    LOG.info(f"KAFKA_CLEAR_TOPIC_ON_START        = {CLEAR_TOPIC_ON_START}")
+    LOG.info(f"PRODUCER_MESSAGE_COUNT            = {MESSAGE_COUNT}")
+    LOG.info(f"PRODUCER_MESSAGE_INTERVAL_SECONDS = {MESSAGE_INTERVAL_SECONDS}")
+
+
+def verify_source() -> None:
+    """Verify the local source file exists.
+
+    Raises:
+        SystemExit: If the source file does not exist.
+    """
+    LOG.info("Verifying local source data...")
+
+    if not SALES_CSV.exists():
+        LOG.error(f"Source file not found: {SALES_CSV}")
+        raise SystemExit(1)
+
+    LOG.info(f"Source file found: {SALES_CSV.name}")
+
+
+def prepare_topic_file() -> None:
+    """Prepare the local simulated topic file.
+
+    If KAFKA_CLEAR_TOPIC_ON_START is true, delete the existing topic file
+    so the producer starts with a clean local topic.
+
+    If KAFKA_CLEAR_TOPIC_ON_START is false, keep existing messages and append.
+    """
+    LOG.info("Preparing local simulated topic file...")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if TOPIC_CSV.exists() and CLEAR_TOPIC_ON_START:
+        TOPIC_CSV.unlink()
+        LOG.info(f"Deleted existing topic file: {TOPIC_CSV.name}")
+
+    if TOPIC_CSV.exists():
+        LOG.info(f"Using existing topic file: {TOPIC_CSV.name}")
+    else:
+        LOG.info(f"Topic file will be created: {TOPIC_CSV.name}")
+
+
+# ===========================================================================
+# DEFINE SECTION P. PRODUCE MESSAGES HELPERS
+# ===========================================================================
+
+
+def get_message_key(message: dict[str, Any]) -> str:
+    """Return the message key for a sale record.
+
+    Module 01 does not use Kafka yet, but this function prepares the same
+    shape used later when the key is sent to Kafka.
+    """
+    try:
+        return str(message["region_id"])
+    except KeyError as error:
+        msg = missing_csv_field_message(
+            field="region_id",
+            available_fields=list(message.keys()),
+        )
+        raise KeyError(msg) from error
+
+
+def generate_messages(count: int) -> Generator[dict[str, str]]:
+    """Generate a stream of sales from the input CSV file.
+
+    Arguments:
+        count: How many sales to generate.
+
+    Yields:
+        One sale row dictionary at a time.
+    """
+    sales_rows = read_csv_rows(SALES_CSV)
+    yield from sales_rows[:count]
+
+
+def send_local_message(message: dict[str, Any]) -> None:
+    """Write one message to the local simulated topic file."""
+    append_csv_row(
+        path=TOPIC_CSV,
+        row=message,
+        fieldnames=list(message.keys()),
+    )
+
+
+def send_messages() -> int:
+    """Generate and write local messages one at a time."""
+    LOG.info("Sending messages...")
+    LOG.info(f"Sending up to {MESSAGE_COUNT} local message(s).")
+    LOG.info(f"Writing to simulated topic file: {TOPIC_CSV.name}")
     LOG.info("Watch each sale arrive. Press CTRL+C to stop early.\n")
 
-    # Declare an empty list to store sale amounts for later analysis.
-    messages: list[float] = []
+    sent_count = 0
 
-    for message in generate_messages(MESSAGE_COUNT):
-        # 1. Log the message tuple as INFO.
-        LOG.info(message)
+    try:
+        for message in generate_messages(MESSAGE_COUNT):
+            LOG.info(format_message_for_log(message))
 
-        # 2. Append the sale amount (the second item in the tuple) to the messages list.
-        messages.append(message[1])  # Append the sale amount to the list
+            key = get_message_key(message)
+            LOG.info(f"  Sending local message with key={key}")
 
-        # 3. Write the message to the output CSV file, one row at a time.
-        with OUTPUT_CSV.open(mode="a", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(message)
+            send_local_message(message)
 
-        # 4. Call the function we defined above to get the statistics string.
-        stats: str = get_statistics(messages)
-        LOG.info(stats)
+            sent_count += 1
+            LOG.info(f"  MESSAGE SENT  sent={sent_count}")
+            time.sleep(MESSAGE_INTERVAL_SECONDS)
 
-        # 5. Wait before generating the next message
-        # Use the time module to pause execution for a specified number of seconds
-        # The time.sleep() function takes a single argument: the number of seconds to pause
-        time.sleep(MESSAGE_INTERVAL_SECONDS)
+    except (FileNotFoundError, KeyError, RuntimeError, ValueError) as error:
+        LOG.error(str(error))
+        LOG.error("Producer stopped before completing all messages.")
+        raise SystemExit(1) from error
 
+    return sent_count
+
+
+# ===========================================================================
+# DEFINE SECTION E. EXIT AND CLEANUP HELPERS
+# ===========================================================================
+
+
+def log_summary(sent_count: int) -> None:
+    """Log final summary statistics."""
+    LOG.info("Summary:")
+    LOG.info(f"  Sent {sent_count} message(s).")
+    log_path(LOG, "WROTE TOPIC_CSV", TOPIC_CSV)
     LOG.info("========================")
     LOG.info("Producer executed successfully!")
     LOG.info("========================")
 
 
-# === CONDITIONAL EXECUTION GUARD ===
+# ===========================================================================
+# MAIN FUNCTION
+# ===========================================================================
 
-# WHY: If running this file as a script, then call main().
-# This is standard Python "boilerplate".
+
+def main() -> None:
+    """Main entry point for the local producer."""
+    log_paths()
+
+    LOG.info("========================")
+    LOG.info("SECTION A. Acquire")
+    LOG.info("========================")
+
+    load_settings()
+    verify_source()
+    prepare_topic_file()
+
+    LOG.info("========================")
+    LOG.info("SECTION P. Produce Messages")
+    LOG.info("========================")
+
+    sent_count = send_messages()
+
+    LOG.info("========================")
+    LOG.info("SECTION E. Exit")
+    LOG.info("========================")
+
+    log_summary(sent_count)
+
+
+# === CONDITIONAL EXECUTION GUARD ===
 
 if __name__ == "__main__":
     main()
