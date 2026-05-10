@@ -3,6 +3,12 @@
 Reads sales from data/sales.csv
 and writes records to a local simulated topic file one message at a time.
 
+Start with main() at the bottom.
+Work up to see how it all fits together.
+
+Many functions are standard helpers
+and should not need project-specific modifications.
+
 Author: Denise Case
 Date: 2026-05
 

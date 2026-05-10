@@ -35,7 +35,7 @@ Run all commands via **uv**.
 Lint / format:
 
 ```shell
-uv run python -m ruff format .
+uv run ruff format .
 uv run python -m ruff check .
 ```
 
