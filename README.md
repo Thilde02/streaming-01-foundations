@@ -253,7 +253,7 @@ uv run python -m streaming.consumer_case
 - Many files are silent helpers. Explore as you like, but nothing is required.
 - You do NOT not to understand everything; understanding builds naturally over time.
 
-## Troubleshooting >>> or
+## Troubleshooting >>>
 
 If you see something like this in your terminal: `>>>` or `...`
 You accidentally started Python interactive mode.
