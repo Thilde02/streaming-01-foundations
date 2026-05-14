@@ -1,4 +1,7 @@
 # streaming-01-foundations
+## Streaming Foundations – Tiffany
+This project is maintained by Tiffany.  
+GitHub Repo: https://github.com/Thilde02/streaming-01-foundations
 
 [![Workflow Guide](https://img.shields.io/badge/Pro--Guide-pro--analytics--02-green)](https://denisecase.github.io/pro-analytics-02/workflow-b-apply-example-project/)
 [![Python 3.14](https://img.shields.io/badge/python-3.14%2B-blue?logo=python)](./pyproject.toml)
