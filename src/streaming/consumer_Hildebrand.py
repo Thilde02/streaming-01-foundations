@@ -147,19 +147,26 @@ def initialize_output() -> None:
 
 
 def process_message(row: dict[str, Any]) -> dict[str, Any]:
-    """Process one local message.
+    """Process one local message by enriching it with new fields."""
 
-    Module 01 does not validate, enrich, chart, store, or use Kafka yet.
-    It simply returns the raw message.
-
-    Arguments:
-        row: A local message row.
-
-    Returns:
-        The same row.
-    """
     LOG.info("Processing raw local message.")
+
+    # Convert fields to numeric types
+    unit_price = float(row.get("unit_price", 0))
+    quantity = int(row.get("quantity", 0))
+
+    # Add derived field: total price
+    total_price = unit_price * quantity
+    row["total_price"] = round(total_price, 2)
+
+    # Add business classification
+    if total_price >= 100:
+        row["order_size"] = "High Value"
+    else:
+        row["order_size"] = "Standard"
+
     return row
+
 
 
 def consume_messages() -> int:
